@@ -1,63 +1,59 @@
-package core
+package tree
 
-import "golang.org/x/exp/maps"
-
-type NodeIndex map[string]string
-
-type Nodes[T any] map[string]Nodable[T]
-
-type IndexableNode[T any] interface {
-	BuildIndex()
-	Query(query T)
-}
-
-type Nodable[T any] interface {
-	GetName() string
-	GetChilds() Nodes[T]
+type Nodable[T any, ID comparable] interface {
+	GetID() ID
+	GetChilds() map[ID]Nodable[T, ID]
 	GetValue() T
 }
 
-type MutableNode[T any] interface {
-	Nodable[T]
-	AddNode(node ...Nodable[T])
+type MutableNode[T any, ID comparable] interface {
+	Nodable[T, ID]
+	AddNode(node ...Nodable[T, ID])
 	DeleteNode(node ...string)
 }
 
-type Node[T any] struct {
-	Name  string                `yaml:"name" json:"name"`
-	Nodes map[string]Nodable[T] `yaml:"nodes" json:"nodes"`
-	Index NodeIndex
+type Node[T any, ID comparable] struct {
+	ID    ID                    `yaml:"id" json:"id"`
+	Nodes map[ID]Nodable[T, ID] `yaml:"nodes" json:"nodes"`
+	Value T
 }
 
-func (bn Node[T]) GetName() string {
-	return bn.Name
+func (bn Node[T, ID]) GetID() ID {
+	return bn.ID
 }
 
-func (bn Node[T]) GetChilds() Nodes[T] {
+func (bn Node[T, ID]) GetChilds() map[ID]Nodable[T, ID] {
 	return bn.Nodes
 }
 
-func (bn *Node[T]) AddNode(node ...Nodable[T]) {
+func (bn Node[T, ID]) GetValue() T {
+	return bn.Value
+}
+
+func (bn *Node[T, ID]) AddNode(node ...Nodable[T, ID]) {
 	for _, n := range node {
-		bn.Nodes[n.GetName()] = n
+		bn.Nodes[n.GetID()] = n
 	}
 }
 
-func (bn *Node[T]) DeleteNode(node ...string) {
+func (bn *Node[T, ID]) DeleteNode(node ...ID) {
 	for _, n := range node {
 		delete(bn.Nodes, n)
 	}
 }
 
-func Walk[T any](root Nodable[T], nextNodesCb func(parent, node Nodable[T])) {
-	nextNodes := []Nodable[T]{root}
-	var parentNode Nodable[T] = nil
-	for len(nextNodes) > 0 {
-		parentNode = nextNodes[0]
-		sliceChilds := maps.Values(parentNode.GetChilds())
-		nextNodes = append(nextNodes[1:], sliceChilds...)
-		for _, c := range sliceChilds {
-			nextNodesCb(parentNode, c)
-		}
+func (bn *Node[T, ID]) Walk(alg Searchable[T, ID], cb SearchableCallBack[T, ID]) {
+	alg.Walk(bn, cb)
+}
+
+func NewNode[T any, ID comparable](id ID, value T, childs ...Nodable[T, ID]) Nodable[T, ID] {
+	childsMap := make(map[ID]Nodable[T, ID], len(childs))
+	for _, c := range childs {
+		childsMap[c.GetID()] = c
+	}
+	return Node[T, ID]{
+		ID:    id,
+		Value: value,
+		Nodes: childsMap,
 	}
 }
